@@ -1,0 +1,115 @@
+﻿# =============================================================================
+# requirements.txt
+#
+# Project: Comparing Mixture, Box, and Wasserstein Ambiguity Sets in
+#          Distributionally Robust Asset Liability Management
+#
+# Author:  CS Chirinda
+# Version: 1.0.0
+# License: MIT
+#
+# Python Version: >=3.10,<3.13
+#
+# Installation:
+#   pip install -r requirements.txt
+#
+# For reproducibility, pin to exact versions via:
+#   pip freeze > requirements-lock.txt
+# =============================================================================
+
+# -----------------------------------------------------------------------------
+# Section 1: Core Scientific Computing Stack
+# -----------------------------------------------------------------------------
+# NumPy: Foundational N-dimensional array library.
+# Underpins all vectorised Monte Carlo simulation (GBM), matrix operations
+# on the scenario tensor Xi in R^{N x T x K}, and numerical linear algebra.
+# Version >=1.24 required for stable Generator-based RNG (np.random.default_rng).
+numpy>=1.24.0,<2.0.0
+
+# SciPy: Scientific computing utilities.
+# Used for: stats.multivariate_normal (correlated GBM draws),
+# stats.norm (confidence intervals), and sparse linear algebra routines.
+scipy>=1.10.0,<2.0.0
+
+# Pandas: Tabular data structures and time-series utilities.
+# Used for: constructing scenario DataFrames, rolling-window MLE estimation
+# of mu/sigma, and export of publication-ready result tables.
+pandas>=2.0.0,<3.0.0
+
+# -----------------------------------------------------------------------------
+# Section 2: Convex Optimisation Modelling Layer
+# -----------------------------------------------------------------------------
+# CVXPY: Domain-specific language for convex optimisation.
+# Core modelling layer for:
+#   - LP reformulations of the Mixture Distribution (MD) ambiguity set
+#     via epigraph representations (Model 5).
+#   - LP reformulations of the Box Distribution (BD) ambiguity set
+#     via Lagrangian duality (Model 13).
+#   - SOCP reformulations of the Wasserstein Metric (WM) ambiguity set
+#     via dual-norm constraints (Model 17).
+# Version >=1.4 required for stable SOCP cone interfaces and
+# SolvingChain diagnostics used in numerical stability validation.
+cvxpy>=1.4.0,<2.0.0
+
+# -----------------------------------------------------------------------------
+# Section 3: Solver Backends
+# -----------------------------------------------------------------------------
+# CLARABEL: Default interior-point solver shipped with CVXPY >=1.4.
+# Handles LP and SOCP problems reliably on moderate-scale instances.
+# Installed as a CVXPY dependency; pinned here for explicitness.
+clarabel>=0.6.0
+
+# OSQP: Operator Splitting QP solver; fallback for LP/QP sub-problems.
+# Installed as a CVXPY dependency; pinned here for explicitness.
+osqp>=0.6.3
+
+# SCS: Splitting Conic Solver; fallback for larger SOCP instances.
+# Installed as a CVXPY dependency; pinned here for explicitness.
+scs>=3.2.0
+
+# NOTE (Production Advisory):
+# For the Wasserstein SOCP (Model 17) at N=1000 scenarios and K=10 assets,
+# numerical instability is likely with open-source solvers. In production,
+# replace with commercial solvers via their CVXPY interfaces:
+#   pip install gurobipy          # Gurobi (requires licence)
+#   pip install cplex             # CPLEX  (requires licence)
+# No version pins are enforced here as licences govern availability.
+
+# -----------------------------------------------------------------------------
+# Section 4: Machine Learning — Regime Identification
+# -----------------------------------------------------------------------------
+# scikit-learn: Machine learning utilities.
+# Used exclusively for: KMeans clustering on rolling (mean, std) feature
+# vectors extracted from the historical return window (2012-2022) to
+# identify Low / Medium / High volatility market regimes that form the
+# vertices of the Mixture Distribution ambiguity set convex hull.
+# Version >=1.3 required for stable KMeans random_state reproducibility.
+scikit-learn>=1.3.0,<2.0.0
+
+# -----------------------------------------------------------------------------
+# Section 5: Visualisation
+# -----------------------------------------------------------------------------
+# Matplotlib: Publication-ready figure generation.
+# Used for: funding ratio trajectories, worst-case allocation plots,
+# convergence diagnostics, and regime classification scatter plots.
+# Version >=3.7 required for constrained_layout stability.
+matplotlib>=3.7.0,<4.0.0
+
+# -----------------------------------------------------------------------------
+# Section 6: Standard Library Modules (no installation required)
+# -----------------------------------------------------------------------------
+# The following modules are part of the Python standard library and require
+# no pip installation. They are listed here for audit and documentation
+# completeness only.
+#
+#   copy        — Deep-copying mutable parameter dataclasses (strict state
+#                 immutability mandate).
+#   math        — Scalar mathematical constants (math.log, math.sqrt) used
+#                 in GBM discretisation: dP/P = mu*dt + sigma*eps*sqrt(dt).
+#   time        — Wall-clock profiling of solver calls for benchmarking
+#                 LP vs SOCP solve times across the three ambiguity models.
+#   dataclasses — @dataclass / field() decorators for typed, immutable
+#                 parameter containers (ModelConfig, SimulationParams, etc.).
+#   typing      — Type hint primitives: Dict, List, Tuple, Any, Optional,
+#                 Callable. Required for PEP-484 compliance throughout the
+#                 implementation-grade codebase.
