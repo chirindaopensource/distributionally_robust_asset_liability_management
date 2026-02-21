@@ -1,0 +1,359 @@
+﻿# ==============================================================================
+# Comparing Mixture, Box, and Wasserstein Ambiguity Sets in Distributionally 
+# Robust Asset Liability Management
+# Study Configuration File
+# Authors: Alireza Ghahtarani, Ahmed Saif, Alireza Ghasemi
+# ==============================================================================
+
+# ==============================================================================
+# A. DATA STRUCTURE SCHEMAS (RAW INPUT ARTIFACTS)
+# ==============================================================================
+
+# --------------------------------------------------------------------------
+# (I_1) HISTORICAL MARKET DATA SCHEMA
+# --------------------------------------------------------------------------
+historical_market_data_schema:
+    description: "Monthly closing levels/rates for 10 indices + risk-free cash (Nov 2012 - Nov 2022)"
+    source: "Investing.com (as cited by the paper)"
+    structure: "pandas.DataFrame"
+    indexing_convention:
+        date_column: "Date"
+        date_alignment: "month_end_last_trading_day"  # must be fixed
+        timezone_policy: "naive_or_utc_but_consistent"
+    columns:
+        Date: "datetime64[ns]"
+        SP500: "float64 - price or total return index level (must be declared)"
+        TSX_Comp: "float64 - price or total return index level (must be declared)"
+        FTSE_300: "float64 - price or total return index level (must be declared)"
+        Nikkei_225: "float64 - price or total return index level (must be declared)"
+        SSE_Comp: "float64 - price or total return index level (must be declared)"
+        PRIVEXD: "float64 - price or total return index level (must be declared)"
+        GSPRTRE: "float64 - price or total return index level (must be declared)"
+        TNX_Yield: "float64 - yield series (unit convention must be declared)"
+        SPGTINTR: "float64 - total return index level"
+        STOXX_Europe_20: "float64 - price or total return index level (must be declared)"
+        RiskFree_Cash: "float64 - cash rate series (unit convention must be declared)"
+    series_metadata:
+        # Prevents silent drift: explicitly declare TR vs price-only and currency policy.
+        is_total_return_index:
+            SP500: false
+            TSX_Comp: false
+            FTSE_300: false
+            Nikkei_225: false
+            SSE_Comp: false
+            PRIVEXD: false
+            GSPRTRE: false
+            SPGTINTR: true
+            STOXX_Europe_20: false
+        currency_policy:
+            assumption: "no_fx_adjustment_or_fx_converted_but_must_be_explicit"
+            fx_series_required_if_converting: 
+                - "FX_USD_CAD"
+                - "FX_EUR_CAD"
+                - "FX_JPY_CAD"
+                - "FX_CNY_CAD"
+
+# --------------------------------------------------------------------------
+# (I_2) ACTUARIAL CASHFLOW INPUTS (REQUIRED FOR ALM)
+# --------------------------------------------------------------------------
+actuarial_cashflows_schema:
+    description: "Deterministic wage base and benefit payment streams at the decision frequency"
+    structure: "dict_or_dataframe_but_must_be_explicit"
+    decision_frequency: "annual"  # aligns with paper's reported 'decision moments' (1..11)
+    keys:
+        A_0: "float - initial assets at t=0"
+        w_t: "array[float] length T+1 - wage base per period"
+        l_t: "array[float] length T+1 - benefit payments per period"
+        cashflow_timing: "beginning_of_period_or_end_of_period (must be fixed)"
+    cashflow_timing_convention:
+        # This matters because it changes the balance equation implementation.
+        contributions_collected: "beginning_of_period"
+        benefits_paid: "beginning_of_period"
+        rebalancing_time: "after_cashflows_before_returns_or_other (must be fixed)"
+
+# --------------------------------------------------------------------------
+# (I_3) DISCOUNT-RATE INPUTS (TO CONSTRUCT W_s AND L_{t,s})
+# --------------------------------------------------------------------------
+discount_rate_inputs_schema:
+    description: "Discount-rate scenario system driving both W_s and L_{t,s} (perfect correlation assumption)"
+    structure: "dict"
+    keys:
+        gamma_scenarios: "array[float] length S - discount rates gamma_s (unit convention fixed)"
+        p_nominal: "array[float] length S - nominal probabilities p_s^0 (sum to 1)"
+        discount_compounding: "annual_effective_or_continuous_or_periodic"
+        pv_equations:
+            W_t: "W_t = w_t / (1 + gamma)^t"
+            L_t: "L_t = sum_{u=0}^T l_u / (1 + gamma)^u"
+
+# --------------------------------------------------------------------------
+# (I_4) REGULATORY / PRACTICAL CONSTRAINTS DEFINING X AND Y
+# --------------------------------------------------------------------------
+regulatory_constraints_schema:
+    description: "Hard constraints defining sets X and Y"
+    structure: "dict"
+    contribution_rate_limits: 
+        min: 0.05
+        max: 0.10
+    portfolio_constraint_type: "weight_constraints"  # must be fixed (weights vs dollars)
+    weight_definition: "w_{n,t} = x_{n,t} / sum_m x_{m,t}"
+    asset_class_mapping:
+        # Must be consistent with the paper’s narrative and your chosen implementation
+        US_Public_Equity: 
+            - "SP500"
+        Canada_Public_Equity: 
+            - "TSX_Comp"
+        Europe_Public_Equity: 
+            - "FTSE_300"
+        Europe_Private_Equity_Proxy: 
+            - "STOXX_Europe_20"
+        Asia_Public_Equity: 
+            - "Nikkei_225"
+            - "SSE_Comp"
+        Private_Equity: 
+            - "PRIVEXD"
+        Real_Estate: 
+            - "GSPRTRE"
+        Infrastructure: 
+            - "SPGTINTR"
+        Fixed_Income_Proxy: 
+            - "TNX_Yield"
+        Cash_RiskFree: 
+            - "RiskFree_Cash"
+    allocation_limits:
+        US_market_max_weight: 0.60
+        Canada_min_weight: 0.20
+        Asia_max_weight: 0.15
+        FixedIncome_min_weight: 0.10
+
+# ==============================================================================
+# B. DATA CONVENTIONS (PREVENT SILENT DRIFT)
+# ==============================================================================
+data_conventions:
+    return_type_for_calibration: "log"  # must be fixed
+    log_return_equation: "r_t = ln(P_t / P_{t-1})"
+    simple_return_equation: "R_t = P_t / P_{t-1} - 1"
+    gross_return_mapping_for_optimization: "1 + xi = exp(log_return) if using log-returns"
+    missing_data_policy: "drop_or_impute_but_must_be_explicit"
+    winsorization_policy: "none_or_thresholds_but_must_be_explicit"
+    unit_conventions:
+        rates_are_decimal: true        # e.g., 0.0162 not 1.62
+        if_rates_are_percent_convert_by: "divide_by_100"
+    tnx_yield_to_return_method:
+        # Must be explicit; otherwise TNX cannot be used as an asset return proxy
+        method: "duration_approx_or_replace_with_total_return_proxy"
+        duration_years_if_duration_approx: 8.0
+        price_return_approx_equation: "DeltaP/P ≈ -Duration * DeltaYield"
+        fallback_proxy_column_if_available: null
+    riskfree_rate_to_return_method:
+        method: "annual_to_periodic_compound"
+        periods_per_year: 12
+        equation: "R_rf,period = (1 + r_rf,annual)^(1/periods_per_year) - 1"
+
+# ==============================================================================
+# C. TIME DISCRETIZATION (CALIBRATION VS DECISION)
+# ==============================================================================
+time_grid:
+    calibration_frequency: "monthly"
+    decision_frequency: "annual"
+    T_years: 10
+    decision_steps_T: 10               # produces decision moments 1..11 including t=0
+    dt_decision: 1.0
+    aggregation_monthly_to_annual:
+        method: "sum_log_returns_then_exp_minus_1"
+        equation: "R_annual = exp(sum_{m=1}^{12} r_m) - 1"
+
+# ==============================================================================
+# D. REGIME IDENTIFICATION (K-MEANS) — REQUIRED FOR MD AND FOR SCENARIO DESIGN
+# ==============================================================================
+regime_clustering_params:
+    algorithm: "k-means"
+    n_clusters: 4
+    regime_labels: 
+        - "LV"
+        - "MV"
+        - "IHV"
+        - "DHV"
+    feature_engineering:
+        features: 
+            - "rolling_mean"
+            - "rolling_std"
+        rolling_window_months: 12
+        standardization: "zscore_per_feature"
+        missing_feature_policy: "drop_initial_window"
+    kmeans_hyperparams:
+        n_init: 50
+        max_iter: 1000
+        tol: 1.0e-06
+        random_state: 2024
+    reported_regime_probabilities_2012_2022:
+        LV: 0.51
+        MV: 0.22
+        IHV: 0.17
+        DHV: 0.10
+
+# ==============================================================================
+# E. SCENARIO GENERATION (GBM) — TRAIN + TEST
+# ==============================================================================
+gbm_scenario_params:
+    model_type: "GBM_increment"
+    equation: "DeltaP/P = mu*Delta t + sigma*epsilon*sqrt(Delta t)"
+    epsilon_distribution: "multivariate_normal"
+    correlation_model:
+        use_cross_asset_covariance: true
+        covariance_estimation: "sample_covariance_or_shrinkage_but_explicit"
+        preserve_inter_asset_dependencies: true
+    regime_conditioning:
+        calibrate_mu_sigma_per_regime: true
+        calibrate_cov_per_regime: false  # set True if you want full regime-dependent dependence
+    scenario_counts:
+        num_mc_scenarios_per_asset_per_regime: 1000
+        num_oos_scenarios: 1000
+    scenario_reduction_for_optimization:
+        # Matches the paper statement: use the average of 1000 scenarios as the regime-period return
+        method: "regime_mean_return"
+        resulting_return_scenarios_K: 4
+    random_seeds:
+        train: 42
+        test: 12345
+
+# ==============================================================================
+# F. AMBIGUITY SETS (MD, BD, WM) — MUST BE EXPLICIT, NOT HEURISTIC-ONLY
+# ==============================================================================
+
+# --------------------------------------------------------------------------
+# (F_1) MIXTURE DISTRIBUTION PARAMETERS (MD): define p^i and q^j explicitly
+# --------------------------------------------------------------------------
+mixture_model_params:
+    I_num_discount_likelihoods: 4
+    J_num_return_likelihoods: 4
+    # Candidate regime-probability vectors as stated in the paper narrative
+    p_likelihoods:
+        p_2012_2022: 
+            LV: 0.51
+            MV: 0.22
+            IHV: 0.17
+            DHV: 0.10
+        p_2002_2012: 
+            LV: 0.35
+            MV: 0.39
+            IHV: 0.15
+            DHV: 0.11
+        p_1992_2002: 
+            LV: 0.41
+            MV: 0.19
+            IHV: 0.20
+            DHV: 0.06
+        p_equal:     
+            LV: 0.25
+            MV: 0.25
+            IHV: 0.25
+            DHV: 0.25
+    # If you use the same likelihood family for returns, state it explicitly; otherwise provide q^j separately
+    q_likelihoods: "same_as_p_likelihoods_or_explicit_dict_required"
+
+# --------------------------------------------------------------------------
+# (F_2) BOX AMBIGUITY PARAMETERS (BD): p^0, q^0 and bounds must be explicit arrays
+# --------------------------------------------------------------------------
+box_model_params:
+    nominal_probabilities:
+        p0_discount: "array_length_S_explicit"
+        q0_returns: "array_length_K_explicit"
+    perturbation_bounds:
+        # Provide per-scenario bounds; must ensure feasibility with sum-to-one handled in the model
+        eta_lower: "array_length_S_explicit"
+        eta_upper: "array_length_S_explicit"
+        xi_lower:  "array_length_K_explicit"
+        xi_upper:  "array_length_K_explicit"
+    bound_construction_rule_documentation:
+        paper_heuristic: "half_range_probabilities"
+        explicit_rule: "eta_upper[s] = +0.5*(max_i p^i_s - min_i p^i_s), eta_lower[s] = -eta_upper[s]"
+        same_for_xi: true
+    probability_sanity_checks:
+        enforce_p0_plus_eta_in_0_1: true
+        enforce_q0_plus_xi_in_0_1: true
+        tolerance: 1.0e-12
+
+# --------------------------------------------------------------------------
+# (F_3) WASSERSTEIN PARAMETERS (WM): epsilons and supports must be finite and explicit
+# --------------------------------------------------------------------------
+wasserstein_model_params:
+    norm_type: "L2"
+    dual_norm_type: "L2"
+    epsilon_radii:
+        epsilon_W: "float_explicit"           # ε^1
+        epsilon_L_by_t: "array_length_T"      # ε_t^1
+        epsilon_r_by_t: "array_length_T"       # ε_t^2
+    support_sets:
+        support_set_type: "box"
+        # Finite lower/upper bounds must be provided or computable deterministically from empirical samples
+        W_support_bounds: 
+            lower: "vector_explicit"
+            upper: "vector_explicit"
+        r_support_bounds_by_t: 
+            lower: "vector_explicit"
+            upper: "vector_explicit"
+        L_support_bounds_by_t: 
+            lower: "scalar_or_vector_explicit"
+            upper: "scalar_or_vector_explicit"
+        support_margin_policy:
+            method: "minmax_plus_margin"
+            margin_multiplier: 0.05  # e.g., 5% padding; must be fixed
+
+# ==============================================================================
+# G. OPTIMIZATION / SOLVER SETTINGS (LP for SP/MD/BD, SOCP for WM)
+# ==============================================================================
+optimization_params:
+    models_to_run: 
+        - "SP"
+        - "MD"
+        - "BD"
+        - "WM"
+    solver_policy:
+        LP_solver: "commercial_recommended"
+        SOCP_solver: "commercial_recommended"
+        numerical_scaling:
+            currency_unit: "millions"
+            probability_floor: 1.0e-12
+    tolerances:
+        optimality: 1.0e-08
+        feasibility: 1.0e-08
+
+# ==============================================================================
+# H. EVALUATION (OUT-OF-SAMPLE) — METRIC DEFINITIONS MUST BE EXPLICIT
+# ==============================================================================
+evaluation_params:
+    out_of_sample:
+        num_scenarios: 1000
+        random_seed: 12345
+        scenario_generation_reference: "paper_mentions_external_distribution_specification"
+    metrics:
+        funding_ratio:
+            equation: "FR_t = A_t / L_t"
+            aggregation: "specify_E[FR_t]_or_FR_of_E[A_t],E[L_t]"
+        fund_return:
+            equation: "MUST_BE_DEFINED_EXPLICITLY_TO_MATCH_PAPER_TABLES"
+            notes: "cannot reproduce without exact definition"
+        HHI:
+            weight_definition: "w_{n,t} = x_{n,t} / sum_m x_{m,t}"
+            equation: "HHI_t = sum_n w_{n,t}^2"
+            reporting: "mean_over_t"
+    pairwise_mean_tests:
+        test_type: "t_test"
+        paired_or_unpaired: "must_be_fixed"
+        equal_variance: "must_be_fixed"
+        sample_unit: "time_points_or_scenario_outcomes_must_be_fixed"
+
+# ==============================================================================
+# I. PLOTTING / REPORTING (COSMETIC BUT MUST BE FIXED FOR IDENTICAL FIGURES)
+# ==============================================================================
+plot_construction_params:
+    figures:
+        Figure 1: "Comparison of optimal asset allocation"
+        Figure 2: "Optimal contribution rate vs psi"
+        Figure 3: "Funding Ratio time series by model"
+        Figure 4: "Fund Return time series by model"
+    models_to_plot: 
+        - "MD"
+        - "BD"
+        - "WM"
+        - "SP"
