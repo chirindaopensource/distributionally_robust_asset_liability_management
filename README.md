@@ -10,7 +10,7 @@
 [![Year](https://img.shields.io/badge/Year-2026-purple)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
 [![Discipline](https://img.shields.io/badge/Discipline-Financial%20Engineering%20%7C%20Operations%20Research-00529B)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
 [![Data Sources](https://img.shields.io/badge/Data-Investing.com%20%7C%20CPP%20Reports-lightgrey)](https://www.investing.com/)
-[![Core Method](https://img.shields.io/badge/Method-Distributionally%20Robust%20Optimization%20(DRO)-orange)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
+[![Core Method](https://img.shields.io/badge/Method-Distributionally%20Robust%20Optimization%20-orange)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
 [![Analysis](https://img.shields.io/badge/Analysis-Stochastic%20Simulation%20%7C%20Sensitivity%20Analysis-red)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
 [![Validation](https://img.shields.io/badge/Validation-Out--of--Sample%20Backtesting-green)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
 [![Robustness](https://img.shields.io/badge/Robustness-Wasserstein%20Metric%20%7C%20Box%20Ambiguity-yellow)](https://github.com/chirindaopensource/distributionally_robust_asset_liability_management)
